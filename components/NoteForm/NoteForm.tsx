@@ -1,102 +1,116 @@
 "use client";
-import { Formik, Form, Field, ErrorMessage } from "formik";
-import * as Yup from "yup";
+
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
 
 import css from "./NoteForm.module.css";
+
 import { createNote } from "@/lib/api";
 import { NoteTag } from "@/types/note";
+import { useNoteStore } from "@/lib/store/noteStore";
 
-interface NoteFormProps {
-  onCancel: () => void;
-}
-
-interface NoteFormValues {
-  title: string;
-  content: string;
-  tag: NoteTag;
-}
-
-const validationSchema = Yup.object({
-  title: Yup.string()
-    .min(3, "Min 3 characters")
-    .max(50, "Max 50 characters")
-    .required("Required"),
-
-  content: Yup.string().max(500, "Max 500 characters"),
-
-  tag: Yup.string()
-    .oneOf(["Todo", "Work", "Personal", "Meeting", "Shopping"])
-    .required("Required"),
-});
-
-const NoteForm = ({ onCancel }: NoteFormProps) => {
+export default function NoteForm() {
+  const router = useRouter();
   const queryClient = useQueryClient();
+
+  const draft = useNoteStore((state) => state.draft);
+  const setDraft = useNoteStore((state) => state.setDraft);
+  const clearDraft = useNoteStore((state) => state.clearDraft);
 
   const mutation = useMutation({
     mutationFn: createNote,
+
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["notes"] });
-      onCancel();
+      clearDraft();
+
+      queryClient.invalidateQueries({
+        queryKey: ["notes"],
+      });
+
+      router.push("/notes/filter/all");
     },
   });
 
+  async function handleSubmit(formData: FormData) {
+    const note = {
+      title: formData.get("title") as string,
+      content: formData.get("content") as string,
+      tag: formData.get("tag") as NoteTag,
+    };
+
+    mutation.mutate(note);
+  }
+
   return (
-    <Formik<NoteFormValues>
-      initialValues={{
-        title: "",
-        content: "",
-        tag: "Todo",
-      }}
-      validationSchema={validationSchema}
-      onSubmit={(values, { resetForm }) => {
-        mutation.mutate(values, {
-          onSuccess: () => {
-            resetForm();
-          },
-        });
-      }}
-    >
-      <Form className={css.form}>
-        <div className={css.formGroup}>
-          <Field name="title" className={css.input} placeholder="Title" />
-          <ErrorMessage name="title" component="span" className={css.error} />
-        </div>
+    <form action={handleSubmit} className={css.form}>
+      <div className={css.formGroup}>
+        <input
+          name="title"
+          minLength={3}
+          maxLength={50}
+          required
+          className={css.input}
+          placeholder="Title"
+          defaultValue={draft.title}
+          onChange={(e) =>
+            setDraft({
+              title: e.target.value,
+            })
+          }
+        />
+      </div>
 
-        <div className={css.formGroup}>
-          <Field
-            name="content"
-            as="textarea"
-            className={css.textarea}
-            placeholder="Content"
-          />
-          <ErrorMessage name="content" component="span" className={css.error} />
-        </div>
+      <div className={css.formGroup}>
+        <textarea
+          name="content"
+          maxLength={500}
+          className={css.textarea}
+          placeholder="Content"
+          defaultValue={draft.content}
+          onChange={(e) =>
+            setDraft({
+              content: e.target.value,
+            })
+          }
+        />
+      </div>
 
-        <div className={css.formGroup}>
-          <Field name="tag" as="select" className={css.select}>
-            <option value="Todo">Todo</option>
-            <option value="Work">Work</option>
-            <option value="Personal">Personal</option>
-            <option value="Meeting">Meeting</option>
-            <option value="Shopping">Shopping</option>
-          </Field>
+      <div className={css.formGroup}>
+        <select
+          name="tag"
+          className={css.select}
+          defaultValue={draft.tag}
+          onChange={(e) =>
+            setDraft({
+              tag: e.target.value as NoteTag,
+            })
+          }
+        >
+          <option value="Todo">Todo</option>
+          <option value="Work">Work</option>
+          <option value="Personal">Personal</option>
+          <option value="Meeting">Meeting</option>
+          <option value="Shopping">Shopping</option>
+        </select>
+      </div>
 
-          <ErrorMessage name="tag" component="span" className={css.error} />
-        </div>
+      <div className={css.actions}>
+        <button
+          type="button"
+          className={css.cancelButton}
+          onClick={() => router.back()}
+        >
+          Cancel
+        </button>
 
-        <div className={css.actions}>
-          <button type="button" className={css.cancelButton} onClick={onCancel}>
-            Cancel
-          </button>
-
-          <button type="submit" className={css.submitButton}>
-            Create note
-          </button>
-        </div>
-      </Form>
-    </Formik>
+        <button
+          type="submit"
+          className={css.submitButton}
+          disabled={mutation.isPending}
+        >
+          Create note
+        </button>
+      </div>
+    </form>
   );
-};
-
-export default NoteForm;
+}
